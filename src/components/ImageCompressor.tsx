@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 
 interface CompressedImage {
@@ -21,7 +20,7 @@ interface CompressedImage {
 const ImageCompressor = () => {
   const [images, setImages] = useState<CompressedImage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [quality, setQuality] = useState([80]);
+  const [quality, setQuality] = useState(80);
   const [outputFormat, setOutputFormat] = useState('jpeg');
   const [maxWidth, setMaxWidth] = useState(1920);
   const [maxHeight, setMaxHeight] = useState(1080);
@@ -91,7 +90,7 @@ const ImageCompressor = () => {
           if (!img.compressedBlob) {
             const compressed = await compressImage(
               img.originalFile,
-              quality[0],
+              quality,
               maxWidth,
               maxHeight,
               outputFormat
@@ -217,14 +216,15 @@ const ImageCompressor = () => {
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-2">
-              <Label>Qualidade: {quality[0]}%</Label>
-              <Slider
+              <Label htmlFor="quality">Qualidade (%)</Label>
+              <Input
+                id="quality"
+                type="number"
                 value={quality}
-                onValueChange={setQuality}
+                onChange={(e) => setQuality(Number(e.target.value))}
+                min={1}
                 max={100}
-                min={10}
-                step={5}
-                className="w-full"
+                placeholder="Ex: 80"
               />
             </div>
 
