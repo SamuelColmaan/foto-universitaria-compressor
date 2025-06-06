@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Upload, Download, Settings, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,7 @@ interface CompressedImage {
 const ImageCompressor = () => {
   const [images, setImages] = useState<CompressedImage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [quality, setQuality] = useState(80);
+  const [targetSizeKB, setTargetSizeKB] = useState(500);
   const [outputFormat, setOutputFormat] = useState('jpeg');
   const [maxWidth, setMaxWidth] = useState(1920);
   const [maxHeight, setMaxHeight] = useState(1080);
@@ -45,7 +44,7 @@ const ImageCompressor = () => {
     });
   }, []);
 
-  const compressImage = useCallback((file: File, quality: number, maxWidth: number, maxHeight: number, format: string): Promise<Blob> => {
+  const compressImage = useCallback((file: File, targetSizeKB: number, maxWidth: number, maxHeight: number, format: string): Promise<Blob> => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
@@ -68,13 +67,48 @@ const ImageCompressor = () => {
 
         canvas.width = width;
         canvas.height = height;
-
-        // Draw and compress
         ctx.drawImage(img, 0, 0, width, height);
-        
-        canvas.toBlob((blob) => {
-          resolve(blob!);
-        }, `image/${format}`, quality / 100);
+
+        // Binary search for the right quality to achieve target size
+        const targetSizeBytes = targetSizeKB * 1024;
+        let minQuality = 0.1;
+        let maxQuality = 1.0;
+        let bestBlob: Blob | null = null;
+
+        const tryCompress = (quality: number): Promise<Blob> => {
+          return new Promise((resolveCompress) => {
+            canvas.toBlob((blob) => {
+              resolveCompress(blob!);
+            }, `image/${format}`, quality);
+          });
+        };
+
+        const findOptimalQuality = async () => {
+          let attempts = 0;
+          const maxAttempts = 10;
+
+          while (attempts < maxAttempts && (maxQuality - minQuality) > 0.01) {
+            const midQuality = (minQuality + maxQuality) / 2;
+            const testBlob = await tryCompress(midQuality);
+
+            if (testBlob.size <= targetSizeBytes) {
+              bestBlob = testBlob;
+              minQuality = midQuality;
+            } else {
+              maxQuality = midQuality;
+            }
+            attempts++;
+          }
+
+          // If we couldn't achieve target size, use the best we got
+          if (!bestBlob) {
+            bestBlob = await tryCompress(minQuality);
+          }
+
+          resolve(bestBlob);
+        };
+
+        findOptimalQuality();
       };
 
       img.src = URL.createObjectURL(file);
@@ -90,7 +124,7 @@ const ImageCompressor = () => {
           if (!img.compressedBlob) {
             const compressed = await compressImage(
               img.originalFile,
-              quality,
+              targetSizeKB,
               maxWidth,
               maxHeight,
               outputFormat
@@ -169,7 +203,7 @@ const ImageCompressor = () => {
           <h1 className="text-4xl font-bold text-foreground">Compressor de Imagens</h1>
         </div>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Comprima múltiplas imagens simultaneamente com controle total sobre qualidade e dimensões
+          Comprima múltiplas imagens simultaneamente com controle total sobre tamanho e dimensões
         </p>
       </div>
 
@@ -216,15 +250,15 @@ const ImageCompressor = () => {
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="quality">Qualidade (%)</Label>
+              <Label htmlFor="target-size">Tamanho Alvo (KB)</Label>
               <Input
-                id="quality"
+                id="target-size"
                 type="number"
-                value={quality}
-                onChange={(e) => setQuality(Number(e.target.value))}
-                min={1}
-                max={100}
-                placeholder="Ex: 80"
+                value={targetSizeKB}
+                onChange={(e) => setTargetSizeKB(Number(e.target.value))}
+                min={50}
+                max={10000}
+                placeholder="Ex: 500"
               />
             </div>
 
